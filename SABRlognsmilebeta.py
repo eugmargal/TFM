@@ -88,6 +88,6 @@ def SABRBlcalb(FS,K,sigmaMKT,Expiry,s):
         OUTPUT:
            res = parameters obtained after optimizing SABRBlfuncobj
     """
-    x0 = np.array([sigmaMKT[np.nonzero(K == FS)],0.01,0.01,0.01]); bnd = ( (0.0001, None), (-0.9999, 0.9999), (0.0001, None), (0.01,1)  )    
+    x0 = np.array([sigmaMKT[np.nonzero(K == FS)],0.01,0.4,0.9]); bnd = ( (0.0001, None), (-0.9999, 0.9999), (0.0001, None), (0.01,1)  )    
     res = minimize(SABRBlfuncobj,x0, args = (FS,K,sigmaMKT,Expiry,s), bounds = bnd, method = 'L-BFGS-B',tol=0.00001)
     return res.x

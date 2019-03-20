@@ -34,7 +34,7 @@ def SABRNormalplot(param,FS,K,Expiry,beta,s):
         elif K[j] != FS:
             Aprimanum = 1 + (logFK[j])**2/24 + (logFK[j])**4/1920
             Aprimaden = 1 + ((1-beta)*logFK[j])**2/24 + ((1-beta)*logFK[j])**4/1920
-            Bprima = (-param[0]**2*beta*(2-beta)**2)/(24*KFS[j]**2) + 0.25*param[0]*param[1]*param[2]*beta/KFS[j] + (2-3*param[1]**2)*param[2]**2/24
+            Bprima = (-param[0]**2*beta*(2-beta))/(24*KFS[j]**2) + 0.25*param[0]*param[1]*param[2]*beta/KFS[j] + (2-3*param[1]**2)*param[2]**2/24
             c = param[2]*KFS[j]*logFK[j]/param[0]
             gprima = (math.sqrt(c**2 - 2*param[1]*c + 1) + c - param[1])/(1-param[1])
     
@@ -65,20 +65,19 @@ def SABRNormalfuncobj(param,FS,K,sigmaMKT,Expiry,beta,s):
         if  K[j] == FS:
             vol1 = (param[0]/FS**(1-beta)) * (1 + ((param[0]**2*(1-beta)**2)/(24*FS**(2-2*beta)) +
                    (param[0]*beta*param[1]*param[2])/(4*FS**(1-beta)) + (2-3*param[1]**2)*param[2]**2/24)*Expiry)
-        
             sq_diff.append((sigmaMKT[j]-vol1)**2)
             
         elif K[j] != FS:
             Aprimanum = 1 + (logFK[j])**2/24 + (logFK[j])**4/1920
             Aprimaden = 1 + ((1-beta)*logFK[j])**2/24 + ((1-beta)*logFK[j])**4/1920
-            Bprima = (-param[0]**2*beta*(2-beta)**2)/(24*KFS[j]**2) + 0.25*param[0]*param[1]*param[2]*beta/KFS[j] + (2-3*param[1]**2)*param[2]**2/24
+            Bprima = (-param[0]**2*beta*(2-beta))/(24*KFS[j]**2) + 0.25*param[0]*param[1]*param[2]*beta/KFS[j] + (2-3*param[1]**2)*param[2]**2/24
             c = param[2]*KFS[j]*logFK[j]/param[0]
             gprima = (math.sqrt(c**2 - 2*param[1]*c + 1) + c - param[1])/(1-param[1])
     
             vol2 = param[0]*(K[j]*FS)**(beta/2)*Aprimanum*(1+Bprima*Expiry)*c/(Aprimaden*math.log(gprima))
-
+            
             sq_diff.append((sigmaMKT[j]-vol2)**2)
-#    print(param,'\t',sum(sq_diff))
+    print(param,'\t',sum(sq_diff))
     return sum(sq_diff)
     
 def SABRNormalcalb(FS,K,sigmaMKT,Expiry,beta,s):
@@ -95,8 +94,7 @@ def SABRNormalcalb(FS,K,sigmaMKT,Expiry,beta,s):
         OUTPUT:
            res = parameters obtained after optimizing SABRBlfuncobj
     """
-    x0 = np.array([sigmaMKT[np.nonzero(K == FS)],0.01,1]); bnd = ( (0.0001, None), (-0.9999, 0.9999), (0.0001, None)  )
-    res = minimize(SABRNormalfuncobj,x0, args = (FS,K,sigmaMKT,Expiry,beta,s), bounds = bnd, method = 'L-BFGS-B',tol=0.00001)
+    x0 = np.array([0.004,0.5,0.1]); bnd = ( (0.0000001, None), (-0.9999, 0.9999), (0.0001, None)  )
+    res = minimize(SABRNormalfuncobj,x0, args = (FS,K,sigmaMKT,Expiry,beta,s), bounds = bnd, method = 'L-BFGS-B',options = {'ftol': 1e-14})
     return res.x
-
 

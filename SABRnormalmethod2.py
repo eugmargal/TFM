@@ -103,6 +103,6 @@ def SABRNormalcalb(FS,K,sigmaMKT,Expiry,beta,s):
         OUTPUT:
            res = parameters obtained after optimizing SABRBlfuncobj
     """
-    x0 = np.array([0.01,0.01]); bnd = ( (-0.9999, 0.9999), (0.0001, None)  )
-    res = minimize(SABRNormalfuncobj,x0, args = (FS,K,sigmaMKT,Expiry,beta,s), bounds = bnd, method = 'L-BFGS-B',tol=0.00001)
+    x0 = np.array([0.001,0.001]); bnd = ( (-0.9999, 0.9999), (0.0001, None)  )
+    res = minimize(SABRNormalfuncobj,x0, args = (FS,K,sigmaMKT,Expiry,beta,s), bounds = bnd, method = 'L-BFGS-B',options = {'ftol': 1e-14})
     return res.x
