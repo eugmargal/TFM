@@ -1,6 +1,5 @@
 import numpy as np
 from scipy.optimize import minimize
-import matplotlib.pyplot as plt
 
 
 def normal_vol(k, f, t, Alpha, beta, Rho, Nu, shift):
@@ -38,23 +37,19 @@ def objfun(param,k,f,t,beta,shift,sigmaMKT):
 
 def calibrate(k,f,t,beta,shift,sigmaMKT):
     x0 = np.array([sigmaMKT[np.nonzero(k == f)],0,0.1]); bnd = ( (0.00001, None), (-0.9999, 0.9999), (0.0001, None)  )
-    res = minimize(objfun,x0, args = (k,f,t,beta,shift,sigmaMKT), bounds = bnd, method = 'L-BFGS-B',tol = 1e-10)#,options = {'ftol': 1e-16})
+    res = minimize(objfun,x0, args = (k,f,t,beta,shift,sigmaMKT), bounds = bnd, method = 'L-BFGS-B')#,options = {'ftol': 1e-16})
     return res.x
 
 
 def objfun2(param,k,f,t,beta,shift,sigmaMKT):
     
     def alpha(rho,nu):
-#        gamma_1 = beta / f
-#        gamma_2 = -1.0 * beta * (1 - beta) / (f * f)         
-#        coef1 = (2*gamma_2 - gamma_1 * gamma_1) * (f ** (2*beta)) * t / 24
-#        coef2 = gamma_1 * rho * nu * (f ** beta) * t / 4
-#        coef3 = 1 + (2 - 3 * rho ** 2) * (nu ** 2) * t / 24
-#        coef4 = - sigmaMKT[np.nonzero(k == f)] * f ** (-beta)
-        coef1 = beta*(2-beta)*t/(24*f**(2-2*beta))
-        coef2 = rho*beta*nu*t/(4*f**(1-beta))
-        coef3 = 1 + (2 - 3 * rho * rho) * nu * nu * t / 24
-        coef4 = - sigmaMKT[np.nonzero(k == f)] * f ** (- beta)
+        gamma_1 = beta / f
+        gamma_2 = -1.0 * beta * (1 - beta) / (f * f)         
+        coef1 = (2*gamma_2 - gamma_1 * gamma_1) * (f ** (2*beta)) * t / 24
+        coef2 = gamma_1 * rho * nu * (f ** beta) * t / 4
+        coef3 = 1 + (2 - 3 * rho ** 2) * (nu ** 2) * t / 24
+        coef4 = - sigmaMKT[np.nonzero(k == f)] * f ** (-beta)
         raices = np.roots([coef1,coef2,coef3,coef4])
         raices = raices[np.isreal(raices) == 1] #returns only real numbers
         raiz = np.amin(raices[raices>0])     #returns minimum positive value
@@ -69,7 +64,7 @@ def objfun2(param,k,f,t,beta,shift,sigmaMKT):
     return sum(sq_diff)
 
 def calibrate2(k,f,t,beta,shift,sigmaMKT):
-    x0 = np.array([0,0.1]); bnd = ( (-0.9999, 0.9999), (0.00001, None)  )
-    res = minimize(objfun2,x0, args = (k,f,t,beta,shift,sigmaMKT), bounds = bnd, method = 'L-BFGS-B', tol = 1e-8)
+    x0 = np.array([0.5,0.1]); bnd = ( (-0.9999, 0.9999), (0.00001, None)  )
+    res = minimize(objfun2,x0, args = (k,f,t,beta,shift,sigmaMKT), bounds = bnd, method = 'TNC')
     return res.x
     
