@@ -51,6 +51,23 @@ def calibrate(k,f,t,beta,shift,sigmaMKT,seed):
     res = minimize(objfun, seed, args = (k,f,t,beta,shift,sigmaMKT), bounds = bnd, method = 'L-BFGS-B',options = {'ftol': 1e-16})
     return res.x
 
+def fit_alpha_to_ATM(f, t, atm_vol, beta, rho, nu, shift):
+    # shift  forward ...
+    f += shift
+
+    f_ = f ** (1 - beta)
+    p = [
+        - beta * (2 - beta) / (24 * f_ ** 2) * t * f ** beta,
+        t * f ** beta * rho * beta * nu / (4 * f_),
+        (1 + t * nu ** 2 * (2 - 3 * rho ** 2) / 24) * f ** beta,
+        -atm_vol
+    ]
+    roots = np.roots(p)
+    roots_real = np.extract(np.isreal(roots), np.real(roots))
+    
+    alpha_first_guess = atm_vol * f ** (-beta)
+    i_min = np.argmin(np.abs(roots_real - alpha_first_guess))
+    return roots_real[i_min]
 
 def objfun2(param,k,f,t,beta,shift,sigmaMKT):
     """
@@ -59,28 +76,14 @@ def objfun2(param,k,f,t,beta,shift,sigmaMKT):
     """
 
     # CALIBRATE ALPHA TO ATM VOL ...        
-    def fit_alpha_to_ATM(f, t, atm_vol, beta, rho, nu, shift):
-        # shift  forward ...
-        f += shift
-    
-        f_ = f ** (1 - beta)
-        p = [
-            - beta * (2 - beta) / (24 * f_ ** 2) * t * f ** beta,
-            t * f ** beta * rho * beta * nu / (4 * f_),
-            (1 + t * nu ** 2 * (2 - 3 * rho ** 2) / 24) * f ** beta,
-            -atm_vol
-        ]
-        roots = np.roots(p)
-        roots_real = np.extract(np.isreal(roots), np.real(roots))
-        
-        alpha_first_guess = atm_vol * f ** (-beta)
-        i_min = np.argmin(np.abs(roots_real - alpha_first_guess))
-        return roots_real[i_min]
+
     
     sq_diff = []; rho = param[0]; nu = param[1];
     atm_vol = sigmaMKT[np.nonzero(k == f)]
+    alphaATM = fit_alpha_to_ATM(f, t, atm_vol, beta, rho, nu, shift)
+    
     for i in range(len(k)):
-        vol = normal_vol(k[i],f,t,fit_alpha_to_ATM(f, t, atm_vol, beta, rho, nu, shift),beta,rho,nu,shift)
+        vol = normal_vol(k[i],f,t,alphaATM,beta,rho,nu,shift)
         sq_diff.append((vol-sigmaMKT[i])**2)
     return sum(sq_diff)
 
@@ -90,26 +93,7 @@ def calibrate2(k,f,t,beta,shift,sigmaMKT, seed):
     """
     bnd = ( (-0.9999, 0.9999), (0.00001, None)  )
     res = minimize(objfun2, seed, args = (k,f,t,beta,shift,sigmaMKT), bounds = bnd, method = 'TNC',options = {'ftol': 1e-16})
-    
 
-    def fit_alpha_to_ATM(f, t, atm_vol, beta, rho, nu, shift):
-        # shift  forward ...
-        f += shift
-    
-        f_ = f ** (1 - beta)
-        p = [
-            - beta * (2 - beta) / (24 * f_ ** 2) * t * f ** beta,
-            t * f ** beta * rho * beta * nu / (4 * f_),
-            (1 + t * nu ** 2 * (2 - 3 * rho ** 2) / 24) * f ** beta,
-            -atm_vol
-        ]
-        roots = np.roots(p)
-        roots_real = np.extract(np.isreal(roots), np.real(roots))
-        
-        alpha_first_guess = atm_vol * f ** (-beta)
-        i_min = np.argmin(np.abs(roots_real - alpha_first_guess))
-        return roots_real[i_min]
-    
     atm_vol = sigmaMKT[np.nonzero(k == f)]
  
     return [fit_alpha_to_ATM(f, t, atm_vol, beta, res.x[0], res.x[1], shift), res.x[0], res.x[1]]
