@@ -58,19 +58,6 @@ def objfun2(param,k,f,t,beta,shift,sigmaMKT):
         the 2 parameters at the same time and holding alpha as a function of them (ATM)
     """
 
-        
-#    def alpha(rho,nu):
-#        gamma_1 = beta / (f + shift)
-#        gamma_2 = -1.0 * beta * (1 - beta) / ((f+shift) * (f+shift))         
-#        coef1 = (2*gamma_2 - gamma_1 * gamma_1) * ((f + shift) ** (2*beta)) * t / 24
-#        coef2 = gamma_1 * rho * nu * ((f+shift) ** beta) * t / 4
-#        coef3 = 1 + (2 - 3 * rho ** 2) * (nu ** 2) * t / 24
-#        coef4 = - sigmaMKT[np.nonzero(k == f)] * (f+shift) ** (-beta)
-#
-#        raices = np.roots([coef1,coef2,coef3,coef4])
-#        raices = raices[np.isreal(raices) == 1] #returns only real numbers
-#        raiz = np.amin(raices[raices>0])     #returns minimum positive value
-#        return raiz.real
     # CALIBRATE ALPHA TO ATM VOL ...        
     def fit_alpha_to_ATM(f, t, atm_vol, beta, rho, nu, shift):
         # shift  forward ...
@@ -104,17 +91,7 @@ def calibrate2(k,f,t,beta,shift,sigmaMKT, seed):
     bnd = ( (-0.9999, 0.9999), (0.00001, None)  )
     res = minimize(objfun2, seed, args = (k,f,t,beta,shift,sigmaMKT), bounds = bnd, method = 'TNC',options = {'ftol': 1e-16})
     
-#    def alpha(rho,nu):
-#        gamma_1 = beta / (f + shift)
-#        gamma_2 = -1.0 * beta * (1 - beta) / ((f+shift) * (f+shift))         
-#        coef1 = (2*gamma_2 - gamma_1 * gamma_1) * ((f + shift) ** (2*beta)) * t / 24
-#        coef2 = gamma_1 * rho * nu * ((f+shift) ** beta) * t / 4
-#        coef3 = 1 + (2 - 3 * rho ** 2) * (nu ** 2) * t / 24
-#        coef4 = - sigmaMKT[np.nonzero(k == f)] * (f+shift) ** (-beta)
-#        raices = np.roots([coef1,coef2,coef3,coef4])
-#        raices = raices[np.isreal(raices) == 1] #returns only real numbers
-#        raiz = np.amin(raices[raices>0])     #returns minimum positive value
-#        return raiz.real
+
     def fit_alpha_to_ATM(f, t, atm_vol, beta, rho, nu, shift):
         # shift  forward ...
         f += shift
