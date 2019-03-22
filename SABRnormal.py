@@ -92,7 +92,7 @@ def calibrate2(k,f,t,beta,shift,sigmaMKT, seed):
         Calibration function for the second method (estimating 2 parameters)
     """
     bnd = ( (-0.9999, 0.9999), (0.00001, None)  )
-    res = minimize(objfun2, seed, args = (k,f,t,beta,shift,sigmaMKT), bounds = bnd, method = 'TNC',options = {'ftol': 1e-16})
+    res = minimize(objfun2, seed, args = (k,f,t,beta,shift,sigmaMKT), bounds = bnd, method = 'L-BFGS-B',options = {'ftol': 1e-16})
 
     atm_vol = sigmaMKT[np.nonzero(k == f)]
  
