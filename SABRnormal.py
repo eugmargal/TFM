@@ -4,6 +4,9 @@ from scipy.optimize import minimize
 
 def normal_vol(k, f, t, Alpha, beta, Rho, Nu, shift):
     # shift both strike and forward ...
+    """
+        Given the parameters returns the parametrized volatilities
+    """
     f = f + shift
     k = k + shift
     
@@ -29,27 +32,39 @@ def normal_vol(k, f, t, Alpha, beta, Rho, Nu, shift):
     return Vol
 
 def objfun(param,k,f,t,beta,shift,sigmaMKT):
+    """
+        Objective function to minimize for calibration while estimating
+        the 3 parameters at the same time
+    """
     sq_diff = []
     for i in range(len(k)):
         vol = normal_vol(k[i],f,t,param[0],beta,param[1],param[2],shift)
         sq_diff.append((vol-sigmaMKT[i])**2)
+
     return sum(sq_diff)
 
-def calibrate(k,f,t,beta,shift,sigmaMKT):
-    x0 = np.array([sigmaMKT[np.nonzero(k == f)],0,0.1]); bnd = ( (0.00001, None), (-0.9999, 0.9999), (0.0001, None)  )
-    res = minimize(objfun,x0, args = (k,f,t,beta,shift,sigmaMKT), bounds = bnd, method = 'L-BFGS-B')#,options = {'ftol': 1e-16})
+def calibrate(k,f,t,beta,shift,sigmaMKT,seed):
+    """
+        Calibration function for the estimation of the 3 parameters at once
+    """
+    bnd = ( (0, None), (-0.9999, 0.9999), (0, None)  )
+    res = minimize(objfun, seed, args = (k,f,t,beta,shift,sigmaMKT), bounds = bnd, method = 'L-BFGS-B',options = {'ftol': 1e-16})
     return res.x
 
 
 def objfun2(param,k,f,t,beta,shift,sigmaMKT):
-    
+    """
+        Objective function to minimize for calibration while estimating
+        the 2 parameters at the same time and holding alpha as a function of them (ATM)
+    """    
     def alpha(rho,nu):
-        gamma_1 = beta / f
-        gamma_2 = -1.0 * beta * (1 - beta) / (f * f)         
-        coef1 = (2*gamma_2 - gamma_1 * gamma_1) * (f ** (2*beta)) * t / 24
-        coef2 = gamma_1 * rho * nu * (f ** beta) * t / 4
+        gamma_1 = beta / (f + shift)
+        gamma_2 = -1.0 * beta * (1 - beta) / ((f+shift) * (f+shift))         
+        coef1 = (2*gamma_2 - gamma_1 * gamma_1) * ((f + shift) ** (2*beta)) * t / 24
+        coef2 = gamma_1 * rho * nu * ((f+shift) ** beta) * t / 4
         coef3 = 1 + (2 - 3 * rho ** 2) * (nu ** 2) * t / 24
-        coef4 = - sigmaMKT[np.nonzero(k == f)] * f ** (-beta)
+        coef4 = - sigmaMKT[np.nonzero(k == f)] * (f+shift) ** (-beta)
+
         raices = np.roots([coef1,coef2,coef3,coef4])
         raices = raices[np.isreal(raices) == 1] #returns only real numbers
         raiz = np.amin(raices[raices>0])     #returns minimum positive value
@@ -60,11 +75,26 @@ def objfun2(param,k,f,t,beta,shift,sigmaMKT):
     for i in range(len(k)):
         vol = normal_vol(k[i],f,t,alpha(param[0],param[1]),beta,param[0],param[1],shift)
         sq_diff.append((vol-sigmaMKT[i])**2)
-    print(sum(sq_diff),param)
     return sum(sq_diff)
 
-def calibrate2(k,f,t,beta,shift,sigmaMKT):
-    x0 = np.array([0.5,0.1]); bnd = ( (-0.9999, 0.9999), (0.00001, None)  )
-    res = minimize(objfun2,x0, args = (k,f,t,beta,shift,sigmaMKT), bounds = bnd, method = 'TNC')
-    return res.x
+def calibrate2(k,f,t,beta,shift,sigmaMKT, seed):
+    """
+        Calibration function for the second method (estimating 2 parameters)
+    """
+    bnd = ( (-0.9999, 0.9999), (0.00001, None)  )
+    res = minimize(objfun2, seed, args = (k,f,t,beta,shift,sigmaMKT), bounds = bnd, method = 'TNC',options = {'ftol': 1e-16})
+    
+    def alpha(rho,nu):
+        gamma_1 = beta / (f + shift)
+        gamma_2 = -1.0 * beta * (1 - beta) / ((f+shift) * (f+shift))         
+        coef1 = (2*gamma_2 - gamma_1 * gamma_1) * ((f + shift) ** (2*beta)) * t / 24
+        coef2 = gamma_1 * rho * nu * ((f+shift) ** beta) * t / 4
+        coef3 = 1 + (2 - 3 * rho ** 2) * (nu ** 2) * t / 24
+        coef4 = - sigmaMKT[np.nonzero(k == f)] * (f+shift) ** (-beta)
+        raices = np.roots([coef1,coef2,coef3,coef4])
+        raices = raices[np.isreal(raices) == 1] #returns only real numbers
+        raiz = np.amin(raices[raices>0])     #returns minimum positive value
+        return raiz.real
+ 
+    return [alpha(res.x[0],res.x[1]), res.x[0], res.x[1]]
     
