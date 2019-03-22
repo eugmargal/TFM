@@ -56,24 +56,44 @@ def objfun2(param,k,f,t,beta,shift,sigmaMKT):
     """
         Objective function to minimize for calibration while estimating
         the 2 parameters at the same time and holding alpha as a function of them (ATM)
-    """    
-    def alpha(rho,nu):
-        gamma_1 = beta / (f + shift)
-        gamma_2 = -1.0 * beta * (1 - beta) / ((f+shift) * (f+shift))         
-        coef1 = (2*gamma_2 - gamma_1 * gamma_1) * ((f + shift) ** (2*beta)) * t / 24
-        coef2 = gamma_1 * rho * nu * ((f+shift) ** beta) * t / 4
-        coef3 = 1 + (2 - 3 * rho ** 2) * (nu ** 2) * t / 24
-        coef4 = - sigmaMKT[np.nonzero(k == f)] * (f+shift) ** (-beta)
+    """
 
-        raices = np.roots([coef1,coef2,coef3,coef4])
-        raices = raices[np.isreal(raices) == 1] #returns only real numbers
-        raiz = np.amin(raices[raices>0])     #returns minimum positive value
-        return raiz.real
+        
+#    def alpha(rho,nu):
+#        gamma_1 = beta / (f + shift)
+#        gamma_2 = -1.0 * beta * (1 - beta) / ((f+shift) * (f+shift))         
+#        coef1 = (2*gamma_2 - gamma_1 * gamma_1) * ((f + shift) ** (2*beta)) * t / 24
+#        coef2 = gamma_1 * rho * nu * ((f+shift) ** beta) * t / 4
+#        coef3 = 1 + (2 - 3 * rho ** 2) * (nu ** 2) * t / 24
+#        coef4 = - sigmaMKT[np.nonzero(k == f)] * (f+shift) ** (-beta)
+#
+#        raices = np.roots([coef1,coef2,coef3,coef4])
+#        raices = raices[np.isreal(raices) == 1] #returns only real numbers
+#        raiz = np.amin(raices[raices>0])     #returns minimum positive value
+#        return raiz.real
+    # CALIBRATE ALPHA TO ATM VOL ...        
+    def fit_alpha_to_ATM(f, t, atm_vol, beta, rho, nu, shift):
+        # shift  forward ...
+        f += shift
     
-    sq_diff = []
+        f_ = f ** (1 - beta)
+        p = [
+            - beta * (2 - beta) / (24 * f_ ** 2) * t * f ** beta,
+            t * f ** beta * rho * beta * nu / (4 * f_),
+            (1 + t * nu ** 2 * (2 - 3 * rho ** 2) / 24) * f ** beta,
+            -atm_vol
+        ]
+        roots = np.roots(p)
+        roots_real = np.extract(np.isreal(roots), np.real(roots))
+        
+        alpha_first_guess = atm_vol * f ** (-beta)
+        i_min = np.argmin(np.abs(roots_real - alpha_first_guess))
+        return roots_real[i_min]
     
+    sq_diff = []; rho = param[0]; nu = param[1];
+    atm_vol = sigmaMKT[np.nonzero(k == f)]
     for i in range(len(k)):
-        vol = normal_vol(k[i],f,t,alpha(param[0],param[1]),beta,param[0],param[1],shift)
+        vol = normal_vol(k[i],f,t,fit_alpha_to_ATM(f, t, atm_vol, beta, rho, nu, shift),beta,rho,nu,shift)
         sq_diff.append((vol-sigmaMKT[i])**2)
     return sum(sq_diff)
 
@@ -84,17 +104,36 @@ def calibrate2(k,f,t,beta,shift,sigmaMKT, seed):
     bnd = ( (-0.9999, 0.9999), (0.00001, None)  )
     res = minimize(objfun2, seed, args = (k,f,t,beta,shift,sigmaMKT), bounds = bnd, method = 'TNC',options = {'ftol': 1e-16})
     
-    def alpha(rho,nu):
-        gamma_1 = beta / (f + shift)
-        gamma_2 = -1.0 * beta * (1 - beta) / ((f+shift) * (f+shift))         
-        coef1 = (2*gamma_2 - gamma_1 * gamma_1) * ((f + shift) ** (2*beta)) * t / 24
-        coef2 = gamma_1 * rho * nu * ((f+shift) ** beta) * t / 4
-        coef3 = 1 + (2 - 3 * rho ** 2) * (nu ** 2) * t / 24
-        coef4 = - sigmaMKT[np.nonzero(k == f)] * (f+shift) ** (-beta)
-        raices = np.roots([coef1,coef2,coef3,coef4])
-        raices = raices[np.isreal(raices) == 1] #returns only real numbers
-        raiz = np.amin(raices[raices>0])     #returns minimum positive value
-        return raiz.real
+#    def alpha(rho,nu):
+#        gamma_1 = beta / (f + shift)
+#        gamma_2 = -1.0 * beta * (1 - beta) / ((f+shift) * (f+shift))         
+#        coef1 = (2*gamma_2 - gamma_1 * gamma_1) * ((f + shift) ** (2*beta)) * t / 24
+#        coef2 = gamma_1 * rho * nu * ((f+shift) ** beta) * t / 4
+#        coef3 = 1 + (2 - 3 * rho ** 2) * (nu ** 2) * t / 24
+#        coef4 = - sigmaMKT[np.nonzero(k == f)] * (f+shift) ** (-beta)
+#        raices = np.roots([coef1,coef2,coef3,coef4])
+#        raices = raices[np.isreal(raices) == 1] #returns only real numbers
+#        raiz = np.amin(raices[raices>0])     #returns minimum positive value
+#        return raiz.real
+    def fit_alpha_to_ATM(f, t, atm_vol, beta, rho, nu, shift):
+        # shift  forward ...
+        f += shift
+    
+        f_ = f ** (1 - beta)
+        p = [
+            - beta * (2 - beta) / (24 * f_ ** 2) * t * f ** beta,
+            t * f ** beta * rho * beta * nu / (4 * f_),
+            (1 + t * nu ** 2 * (2 - 3 * rho ** 2) / 24) * f ** beta,
+            -atm_vol
+        ]
+        roots = np.roots(p)
+        roots_real = np.extract(np.isreal(roots), np.real(roots))
+        
+        alpha_first_guess = atm_vol * f ** (-beta)
+        i_min = np.argmin(np.abs(roots_real - alpha_first_guess))
+        return roots_real[i_min]
+    
+    atm_vol = sigmaMKT[np.nonzero(k == f)]
  
-    return [alpha(res.x[0],res.x[1]), res.x[0], res.x[1]]
+    return [fit_alpha_to_ATM(f, t, atm_vol, beta, res.x[0], res.x[1], shift), res.x[0], res.x[1]]
     
