@@ -37,17 +37,23 @@ def create_data(sample):
     np.save('X_sample.npy',X); np.save('y_sample.npy',y)
     return X, y
 
-X,y = create_data(500000);
-#X = np.load('X_sample.npy'); y = np.load('y_sample.npy')
+#X,y = create_data(500000);
+X = np.load('X_sample.npy'); y = np.load('y_sample.npy')
 
 # Create data input and output for neural network
 # The output to predict will be the parameters alpha, rho, nu
-X_mean = X.mean(axis = 0); X_std = X.std(axis = 0)
+#X_mean = X.mean(axis = 0); X_std = X.std(axis = 0)
+from sklearn import preprocessing
+scaler = preprocessing.MinMaxScaler()
+y[:,0] = np.ravel(scaler.fit_transform(y[:,0].reshape(-1,1)))
+
 from sklearn.model_selection import train_test_split 
 X_train, X_test, y_train, y_test = train_test_split(X,y,test_size = 0.2)
-from sklearn import preprocessing
-X_train = preprocessing.scale(X_train)
-X_test = preprocessing.scale(X_test)
+#X_train = preprocessing.scale(X_train)
+#X_test = preprocessing.scale(X_test)
+
+
+
 ### NEURAL NETWORK ###
 import keras
 from keras.models import Sequential
@@ -139,12 +145,13 @@ model.save('volstoparams_scale.h5')
 #for i in range(1,len(model.layers)):
 #    NNParameters.append(model.layers[i].get_weights())
     
-
+#y_test[:,0] = np.ravel(scaler.inverse_transform(y_test[:,0].reshape(-1,1)))
 # Comprobar con modelo aleatorio #
 import SABRnormal
 import matplotlib.pyplot as plt
 testcase = -2000; Xtestcase = np.ravel(X_test[testcase,:]);
 testparams = np.ravel(model.predict(X_test[testcase,:].reshape(1,-1)))
+testparams[0] = scaler.inverse_transform(testparams[0])
 vol_test = []; 
 for j in range(11):
     aux = SABRnormal.normal_vol(Xtestcase[j],Xtestcase[5],Xtestcase[-1],testparams[0],0,testparams[1],testparams[2],0)
