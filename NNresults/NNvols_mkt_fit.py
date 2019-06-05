@@ -47,8 +47,9 @@ def objfun(param,k,f,t,beta,shift,sigmaMKT):
 
     return MSE
 
-# Test and show pot of only one swaption
-seed = [0.001,0,0.01]; testcase = 90
+
+### Test and show plot of only one swaption ###
+seed = [0.001,0,0.01]; testcase = 77
 bnd = ( (0, None), (-0.9999, 0.9999), (0, None)  )
 args = ( Xmarket[testcase,:11],Xmarket[testcase,5],Xmarket[testcase,-1],0,0,Xmarket[testcase,11:-1] )
 
@@ -73,7 +74,8 @@ plt.grid(True); plt.legend(['error']); plt.title('approximation error')
 #plt.gca().set_yticklabels(['{:.2f}%'.format(x*100) for x in plt.gca().get_yticks()]) #vol as %
 plt.tight_layout()
 
-# Test MSE error of all market swaptions
+
+### Test MSE error of all market swaptions ###
 error_test = np.zeros((252,11))
 for i in range(len(Xmarket)):
     args = ( Xmarket[i,:11],Xmarket[i,5],Xmarket[i,-1],0,0,Xmarket[i,11:-1] )
@@ -88,21 +90,26 @@ RMSE = np.sqrt(np.sum(np.square(error_test), axis = 0)/len(Xmarket))
 title = np.linspace(-5,5,11)
 result = pd.DataFrame(RMSE.reshape(1,-1),index = None, columns = title)
 
-
-result2 = np.vstack((np.sum(np.abs(error_test), axis = 1), Xmarket[:,-1]))
-
+### 3D plot of RMSE vs maturity of swaptions and options ###
 plt.figure()
-#for i in range(10,14):
-#    plt.plot(np.linspace(1,18,18),result2[0,18*i:18*(i+1)])
-#    plt.legend(['a','b','c','d'])
-#    
-from mpl_toolkits.mplot3d import Axes3D
-
+result2 = np.vstack((np.sqrt(np.mean(np.square(error_test), axis = 1)), Xmarket[:,-1]))  
+X = result2[1,:18]
+Y = np.hstack((np.linspace(1,10,10), 15,20,25,30))
+X, Y = np.meshgrid(X, Y)
 z = np.hsplit(result2[0,:],14)
 fig = plt.figure()
 ax = fig.gca(projection='3d')
-surf = ax.plot_surface(np.linspace(1,14,14),result2[1,:18], np.array(z),
+ax.plot_surface(X,Y, np.array(z),
                 cmap='viridis', edgecolor='none')
-ax.set_title('surface');
+ax.set_title('Volatilility error mean accross strikes');
+ax.set_xlabel('Option maturity'); ax.set_ylabel('Swap maturity')
+ax.set_zlabel('RMSE mean')
 plt.show()
+
+### Plot of RMSE vs swaption maturity ###
+plt.figure()
+plt.plot(result2[1,:18],np.sum(np.matrix(z),axis=0).reshape(-1,1))
+plt.title('RMSE accross maturities'); plt.xlabel('Swaption maturities'); plt.ylabel('RMSE')
+
+
 
