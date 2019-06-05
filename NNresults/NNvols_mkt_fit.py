@@ -1,56 +1,108 @@
 import numpy as np
-from keras.models import load_model
-model = load_model('paramstovols.h5')
-X = np.load('X_sample_vols.npy'); vols = np.load('y_sample_vols.npy');
-from scipy.optimize import minimize
 import matplotlib.pyplot as plt
+import pandas as pd
 
+data = pd.read_csv('Smile_30_4_2019.csv', sep = ',', header = 0, index_col = False, engine = 'python')
+data[['Currency','Maturity','IRS_duration']] = data.Reference.str.split("_", expand = True)
+matur = data.Maturity.str.extract('(\d+)([MY])', expand = True)
+T = []
+
+for i in range(len(matur)):
+    if matur.iloc[i,1] == 'M':
+        aux = pd.to_numeric(matur.iloc[i,0]) / 12
+        T.append(aux)
+    else:
+        T.append(matur.iloc[i,0])
+        
+def strikeABS(K_bps, FR):
+    K = FR + K_bps/10000
+    return K
+
+length = int(len(data) / 11); Xmarket = np.zeros((length,23))
+for i in range(length):
+    strike = []; vol = []
+    for j in range(11):
+        Kaux = strikeABS(pd.to_numeric(data.StrikeATMdiff[j + 11*i]),pd.to_numeric(data.Forward_Rate[j + 11*i]))
+        strike.append(Kaux)
+        vol.append(pd.to_numeric(data.Volatility[j + 11*i]))
+    Xmarket[i,:] = np.hstack((strike,vol, T[11*i]))
+
+from keras import backend as K
+# Set double precision so everithing works fine in calibration ...
+K.set_floatx('float64')
+from keras.models import load_model
+NN = load_model('paramstovols_fl64.h5')
+#X = np.load('X_sample_vols.npy'); vols = np.load('y_sample_vols.npy');
+import SABRnormal
+
+from scipy.optimize import minimize
 def objfun(param,k,f,t,beta,shift,sigmaMKT):
     """
         Objective function to minimize for calibration while estimating
         the 3 parameters at the same time
     """
-    alpha,rho,nu = param
-    inputs = np.hstack((k, alpha, rho, nu,t)).reshape(1,-1)
-    vols = np.ravel(model.predict(inputs))
+    vbles = np.hstack((k,param,t)).reshape(1,-1)
+    vols = np.ravel(NN.predict(vbles))
     MSE = np.sum((vols - sigmaMKT)**2)
 
     return MSE
 
-def calibrate(k,f,t,beta,shift,sigmaMKT,seed):
-    """
-        Calibration function for the estimation of the 3 parameters at once
-    """
-    bnd = ( (0, None), (-0.9999, 0.9999), (0, None)  )
-    res = minimize(objfun, seed, args = (k,f,t,beta,shift,sigmaMKT), bounds = bnd,
-                   method = 'L-BFGS-B', options={'disp': True})
-    return res.x
-
-seed = [0.004,0.5,0.4]
-#param1 = calibrate(X[0,:11],X[0,5],X[0,-1],0,0,vols[0,:],seed)
-
+# Test and show pot of only one swaption
+seed = [0.001,0,0.01]; testcase = 90
 bnd = ( (0, None), (-0.9999, 0.9999), (0, None)  )
-args = ( X[0,:11],X[0,5],X[0,-1],0,0,vols[0,:] )
+args = ( Xmarket[testcase,:11],Xmarket[testcase,5],Xmarket[testcase,-1],0,0,Xmarket[testcase,11:-1] )
 
 
 res = minimize(objfun, seed, args, bounds = bnd,
-               method = 'L-BFGS-B',options = {'ftol': 1e-16, 'disp': True})
+               method = 'TNC',options = {'ftol': 1e-16, 'disp': True})
 
-
-import SABRnormal
 vol_test = []; 
 for j in range(11):
-    aux = SABRnormal.normal_vol(X[0,j],X[0,5],X[0,-1],res.x[0],0,res.x[1],res.x[2],0)
+    aux = SABRnormal.normal_vol(Xmarket[testcase,j],Xmarket[testcase,5],Xmarket[testcase,-1],res.x[0],0,res.x[1],res.x[2],0)
     vol_test.append(aux)
-
+    
 plt.figure()
 plt.subplot(121)
-plt.plot(X[0,:11], vols[0,:], color = 'blue', marker = 'x', linewidth = 1.0);
-plt.plot(X[0,:11],vol_test, color = 'green', marker = 'o', linewidth = 1.0);
-plt.grid(True); plt.legend(['Approx','ANN']); plt.title('volatility smile')
+plt.plot(Xmarket[testcase,:11],Xmarket[testcase,11:-1], color = 'blue', marker = 'x', linewidth = 1.0);
+plt.plot(Xmarket[testcase,:11],vol_test, color = 'green', marker = 'o', linewidth = 1.0);
+plt.grid(True); plt.legend(['Market','ANN']); plt.title('volatility smile')
 
 plt.subplot(122)
-plt.plot(X[0,:11], (vols[0,:] - vol_test), linewidth = 1.0);
+plt.plot(Xmarket[testcase,:11], (Xmarket[testcase,11:-1] - vol_test), linewidth = 1.0);
 plt.grid(True); plt.legend(['error']); plt.title('approximation error')
 #plt.gca().set_yticklabels(['{:.2f}%'.format(x*100) for x in plt.gca().get_yticks()]) #vol as %
 plt.tight_layout()
+
+# Test MSE error of all market swaptions
+error_test = np.zeros((252,11))
+for i in range(len(Xmarket)):
+    args = ( Xmarket[i,:11],Xmarket[i,5],Xmarket[i,-1],0,0,Xmarket[i,11:-1] )
+    res = minimize(objfun, seed, args, bounds = bnd,
+               method = 'TNC',options = {'ftol': 1e-16, 'disp': True})
+    vol_test = []; 
+    for j in range(11):
+        aux = SABRnormal.normal_vol(Xmarket[i,j],Xmarket[i,5],Xmarket[i,-1],res.x[0],0,res.x[1],res.x[2],0)
+        vol_test.append(aux)
+    error_test[i] = (Xmarket[i,11:-1] - vol_test)
+RMSE = np.sqrt(np.sum(np.square(error_test), axis = 0)/len(Xmarket))
+title = np.linspace(-5,5,11)
+result = pd.DataFrame(RMSE.reshape(1,-1),index = None, columns = title)
+
+
+result2 = np.vstack((np.sum(np.abs(error_test), axis = 1), Xmarket[:,-1]))
+
+plt.figure()
+#for i in range(10,14):
+#    plt.plot(np.linspace(1,18,18),result2[0,18*i:18*(i+1)])
+#    plt.legend(['a','b','c','d'])
+#    
+from mpl_toolkits.mplot3d import Axes3D
+
+z = np.hsplit(result2[0,:],14)
+fig = plt.figure()
+ax = fig.gca(projection='3d')
+surf = ax.plot_surface(np.linspace(1,14,14),result2[1,:18], np.array(z),
+                cmap='viridis', edgecolor='none')
+ax.set_title('surface');
+plt.show()
+
