@@ -1,5 +1,4 @@
 import numpy as np
-import matplotlib.pyplot as plt
 import pandas as pd
 
 data = pd.read_csv('Smile_30_4_2019.csv', sep = ',', header = 0, index_col = False, engine = 'python')
@@ -25,91 +24,124 @@ for i in range(length):
         Kaux = strikeABS(pd.to_numeric(data.StrikeATMdiff[j + 11*i]),pd.to_numeric(data.Forward_Rate[j + 11*i]))
         strike.append(Kaux)
         vol.append(pd.to_numeric(data.Volatility[j + 11*i]))
-    Xmarket[i,:] = np.hstack((strike,vol, T[11*i]))
+    Xmarket[i,:] = np.hstack((strike, vol, T[11*i]))
 
 from keras import backend as K
-# Set double precision so everithing works fine in calibration ...
-K.set_floatx('float64')
+K.set_floatx('float64')     # Set double precision so everithing works fine in calibration ...
 from keras.models import load_model
-NN = load_model('paramstovols_fl64.h5')
+
+
+X5_ = Xmarket[ Xmarket[:,-1] >= 5 ]   # Select only market values with maturity >= 5Y
+#X_5 = Xmarket[ Xmarket[:,-1] < 5 ]    # Select only market values with maturity < 5Y
+#X_1 = Xmarket[ Xmarket[:,-1] < 1]     # Select only market values with maturity < 1Y
+
+#NN = load_model('paramstovols_fl64.h5')
+NN5_30 = load_model('paramstovols_fl64_5_30.h5')
+#NN_5 = load_model('paramstovols_fl64_5.h5')
 #X = np.load('X_sample_vols.npy'); vols = np.load('y_sample_vols.npy');
-import SABRnormal
 
-from scipy.optimize import minimize
-def objfun(param,k,f,t,beta,shift,sigmaMKT):
-    """
-        Objective function to minimize for calibration while estimating
-        the 3 parameters at the same time
-    """
-    vbles = np.hstack((k,param,t)).reshape(1,-1)
-    vols = np.ravel(NN.predict(vbles))
-    MSE = np.sum((vols - sigmaMKT)**2)
-
-    return MSE
-
-
-### Test and show plot of only one swaption ###
-seed = [0.001,0,0.01]; testcase = 77
-bnd = ( (0, None), (-0.9999, 0.9999), (0, None)  )
-args = ( Xmarket[testcase,:11],Xmarket[testcase,5],Xmarket[testcase,-1],0,0,Xmarket[testcase,11:-1] )
-
-
-res = minimize(objfun, seed, args, bounds = bnd,
-               method = 'TNC',options = {'ftol': 1e-16, 'disp': True})
-
-vol_test = []; 
-for j in range(11):
-    aux = SABRnormal.normal_vol(Xmarket[testcase,j],Xmarket[testcase,5],Xmarket[testcase,-1],res.x[0],0,res.x[1],res.x[2],0)
-    vol_test.append(aux)
+def analisis(X, network, seed, plot_swap_option, plot_option, test_Hagan, test_Hagan_ATM):
     
-plt.figure()
-plt.subplot(121)
-plt.plot(Xmarket[testcase,:11],Xmarket[testcase,11:-1], color = 'blue', marker = 'x', linewidth = 1.0);
-plt.plot(Xmarket[testcase,:11],vol_test, color = 'green', marker = 'o', linewidth = 1.0);
-plt.grid(True); plt.legend(['Market','ANN']); plt.title('volatility smile')
+    def objfun(param,k,f,t,beta,shift,sigmaMKT):
+        """
+            Objective function to minimize for calibration while estimating
+            the 3 parameters at the same time
+        """
+        vbles = np.hstack((k,param,t)).reshape(1,-1)
+        vols = np.ravel(network.predict(vbles))
+        MSE = np.sum((vols - sigmaMKT)**2)     
+        return MSE
 
-plt.subplot(122)
-plt.plot(Xmarket[testcase,:11], (Xmarket[testcase,11:-1] - vol_test), linewidth = 1.0);
-plt.grid(True); plt.legend(['error']); plt.title('approximation error')
-#plt.gca().set_yticklabels(['{:.2f}%'.format(x*100) for x in plt.gca().get_yticks()]) #vol as %
-plt.tight_layout()
+    import SABRnormal
+    from scipy.optimize import minimize
 
+    number_swaptions = X.shape[0]
+    error_test = np.zeros((number_swaptions,11))
+    
+    # calibration to NN module
+    for i in range(number_swaptions):
+        args = ( X[i,:11],X[i,5],X[i,-1],0,0,X[i,11:-1] )
+        res = minimize(objfun, seed, args,
+                           method = 'BFGS')   #,options = {'disp': True})           
+        vol_test = []; 
+        for j in range(11):
+            aux = SABRnormal.normal_vol(X[i,j],X[i,5],X[i,-1],res.x[0],0,res.x[1],res.x[2],0)
+            vol_test.append(aux)
+        error_test[i] = (X[i,11:-1] - vol_test)
+    RMSE = np.sqrt(np.mean(np.square(error_test), axis = 0))*10000
 
-### Test MSE error of all market swaptions ###
-error_test = np.zeros((252,11))
-for i in range(len(Xmarket)):
-    args = ( Xmarket[i,:11],Xmarket[i,5],Xmarket[i,-1],0,0,Xmarket[i,11:-1] )
-    res = minimize(objfun, seed, args, bounds = bnd,
-               method = 'TNC',options = {'ftol': 1e-16, 'disp': True})
-    vol_test = []; 
-    for j in range(11):
-        aux = SABRnormal.normal_vol(Xmarket[i,j],Xmarket[i,5],Xmarket[i,-1],res.x[0],0,res.x[1],res.x[2],0)
-        vol_test.append(aux)
-    error_test[i] = (Xmarket[i,11:-1] - vol_test)
-RMSE = np.sqrt(np.sum(np.square(error_test), axis = 0)/len(Xmarket))
-title = np.linspace(-5,5,11)
-result = pd.DataFrame(RMSE.reshape(1,-1),index = None, columns = title)
+    title = ["ATM - 5", "ATM - 4", "ATM - 3", "ATM - 2", "ATM - 1", "ATM", "ATM + 1", "ATM + 2", "ATM + 3 ", "ATM + 4", "ATM + 5"];
+    data = pd.DataFrame(RMSE,columns = ['NN'], index = title)
+    
+    import matplotlib.pyplot as plt
 
-### 3D plot of RMSE vs maturity of swaptions and options ###
-plt.figure()
-result2 = np.vstack((np.sqrt(np.mean(np.square(error_test), axis = 1)), Xmarket[:,-1]))  
-X = result2[1,:18]
-Y = np.hstack((np.linspace(1,10,10), 15,20,25,30))
-X, Y = np.meshgrid(X, Y)
-z = np.hsplit(result2[0,:],14)
-fig = plt.figure()
-ax = fig.gca(projection='3d')
-ax.plot_surface(X,Y, np.array(z),
-                cmap='viridis', edgecolor='none')
-ax.set_title('Volatilility error mean accross strikes');
-ax.set_xlabel('Option maturity'); ax.set_ylabel('Swap maturity')
-ax.set_zlabel('RMSE mean')
-plt.show()
+    ### 3D plot of RMSE vs maturity of swaptions and options ###
+    if plot_swap_option == 1:
+        x_array = np.unique(X[:,-1])
+        result = np.sqrt(np.mean(np.square(error_test), axis = 1))       
+        z = np.hsplit(result,14)
+        y_array = np.hstack((np.linspace(1,10,10), 15,20,25,30))
+        x_array, y_array = np.meshgrid(x_array, y_array)
+        fig = plt.figure()
+        ax = fig.gca(projection='3d')
+        ax.plot_surface(x_array, y_array, np.array(z),
+                        cmap='viridis', edgecolor='none')
+        ax.set_title('Volatilility error mean accross strikes');
+        ax.set_xlabel('Option maturity'); ax.set_ylabel('Swap maturity')
+        ax.set_zlabel('RMSE mean')
+        plt.show()
+        
+    ### Plot of RMSE vs swaption maturity ###
+    if plot_option == 1:
+        x_array = np.unique(X[:,-1])
+        result = np.sqrt(np.mean(np.square(error_test), axis = 1))       
+        z = np.hsplit(result,14)
+        plt.figure()
+        plt.plot(x_array,np.mean(np.matrix(z),axis=0).reshape(-1,1))
+        plt.title('RMSE accross maturities'); plt.xlabel('Swaption maturities'); plt.ylabel('RMSE')
+    
+    if test_Hagan == 1:
+        error_Hagan = np.zeros((number_swaptions,11))
+        for i in range(len(X)):
+            res = SABRnormal.calibrate(X[i,:11],X[i,5],X[i,-1],0,0,X[i,11:-1],seed)
+            vol_test = []; 
+            for j in range(11):
+                aux = SABRnormal.normal_vol(X[i,j],X[i,5],X[i,-1],res[0],0,res[1],res[2],0)
+                vol_test.append(aux)
+            error_Hagan[i] = (X[i,11:-1] - vol_test)
+        
+        RMSE_Hagan = np.sqrt(np.mean(np.square(error_Hagan), axis = 0))*10000
+        result_Hagan = pd.DataFrame(RMSE_Hagan, columns = ['Hagan'], index = title)
+        data = data.add(result_Hagan, fill_value = 0)
+        
+    if test_Hagan_ATM == 1:
+        error_Hagan_ATM = np.zeros((number_swaptions,11))
+        seed = np.delete(seed,0)     # now alpha is implicit, no need to fit it
+        for i in range(len(X)):
+            res = SABRnormal.calibrate2(X[i,:11],X[i,5],X[i,-1],0,0,X[i,11:-1],seed)
+            vol_test = []; 
+            for j in range(11):
+                aux = SABRnormal.normal_vol(X[i,j],X[i,5],X[i,-1],res[0],0,res[1],res[2],0)
+                vol_test.append(aux)
+            error_Hagan_ATM[i] = (X[i,11:-1] - vol_test)       
 
-### Plot of RMSE vs swaption maturity ###
-plt.figure()
-plt.plot(result2[1,:18],np.sum(np.matrix(z),axis=0).reshape(-1,1))
-plt.title('RMSE accross maturities'); plt.xlabel('Swaption maturities'); plt.ylabel('RMSE')
+        RMSE_Hagan_ATM = np.sqrt(np.mean(np.square(error_Hagan_ATM), axis = 0))*10000
+        result_Hagan_ATM = pd.DataFrame(RMSE_Hagan_ATM, columns = ['Hagan ATM'], index = title)
+        data = data.add(result_Hagan_ATM, fill_value = 0)
+                
+    return data[['NN','Hagan','Hagan ATM']]
 
+errores = analisis(X5_, NN5_30, [0.001, 0.01, 0.4] , 0,0,1,1)
 
+pd.options.display.float_format = '{:.4f}'.format
+print(errores[['NN','Hagan','Hagan ATM']])
 
+#pd.reset_option('display.float_format')
+
+ 
+        
+        
+        
+        
+        
+        
